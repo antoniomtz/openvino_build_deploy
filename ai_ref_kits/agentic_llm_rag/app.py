@@ -24,7 +24,7 @@ from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.embeddings.huggingface_openvino import OpenVINOEmbedding
 from llama_index.llms.openvino import OpenVINOLLM
 
-from tools import Math, PaintCostCalculator
+from tools import Math, PaintCostCalculator, ShoppingCart
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -46,7 +46,6 @@ def qwen_completion_to_prompt(completion):
 
 def phi_completion_to_prompt(completion):
     return f"<|system|><|end|><|user|>{completion}<|end|><|assistant|>\n"
-
 
 def llama3_completion_to_prompt(completion):
     return f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{completion}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
@@ -81,7 +80,24 @@ def setup_tools():
         name="calculate_paint_cost",
         description="Calculate paint cost for a given area. Required inputs: area (float, square feet), price_per_gallon (float), add_paint_supply_costs (bool)"
     )
-    return multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator
+    add_to_cart_tool = FunctionTool.from_defaults(
+        fn=ShoppingCart.add_to_cart,
+        name="add_to_cart",
+        description="Add a paint product to the customer's shopping cart. Required inputs: product_name (string), quantity (int), price_per_unit (float)"
+    )
+    
+    get_cart_items_tool = FunctionTool.from_defaults(
+        fn=ShoppingCart.get_cart_items,
+        name="get_cart_items",
+        description="Retrieve all items currently in the customer's shopping cart. No inputs required."
+    )
+    
+    clear_cart_tool = FunctionTool.from_defaults(
+        fn=ShoppingCart.clear_cart,
+        name="clear_cart",
+        description="Clear all items from the customer's shopping cart. No inputs required."
+    )
+    return multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator, add_to_cart_tool, get_cart_items_tool, clear_cart_tool
 
 
 def load_documents(text_example_en_path):
@@ -99,44 +115,6 @@ def load_documents(text_example_en_path):
 
     return index
 
-
-# Function to simulate adding items to cart, and to check size of cart
-def purchase_click(cart, *components):
-    """Update the cart with unique selected items and their quantities."""
-    selected_items = []
-    quantities = []
-
-    for i in range(0, len(components), 2):
-        item_checkbox = components[i]
-        quantity_box = components[i + 1]
-        if item_checkbox is True:  # Fix to check if checkbox is selected
-            selected_items.append(item_components[i // 2][0].label)
-            quantities.append(quantity_box)
-
-    updated_cart = cart.copy()
-    for item, quantity in zip(selected_items, quantities):
-        if item and quantity > 0:
-            item_entry = (item, quantity)
-            # Update or add the item with quantity in the cart
-            for idx, cart_item in enumerate(updated_cart):
-                if cart_item[0] == item:
-                    updated_cart[idx] = item_entry
-                    break
-            else:
-                updated_cart.append(item_entry)
-
-    # Calculate the total quantity of items in the cart
-    cart_size = sum(quantity for _, quantity in updated_cart)
-    # Update purchase action to list items and their quantities
-    if selected_items:
-        item_details = ", ".join([f"{item} (Quantity: {quantity})" for item, quantity in zip(selected_items, quantities)])
-        purchase_action = f"Added the following items to cart: {item_details}."
-    else:
-        purchase_action = "No items selected."
-
-    return updated_cart, purchase_action, cart_size
-
-
 # Custom function to handle reasoning failures
 def custom_handle_reasoning_failure(callback_manager, exception):
     return "Hmm...I didn't quite that. Could you please rephrase your question to be simpler?"
@@ -151,11 +129,26 @@ def run_app(agent):
         def __exit__(self, *args):
             self.extend(self._stringio.getvalue().splitlines())
             del self._stringio
-            sys.stdout = self._stdout
+            sys.stdout = self._stdout        
 
     def _handle_user_message(user_message, history):
         return "", [*history, (user_message, "")]
 
+    def update_cart_display():
+        cart_items = ShoppingCart.get_cart_items()
+        if not cart_items:
+            return "### 🛒 Your Shopping Cart is Empty"
+            
+        table = "### 🛒 Your Shopping Cart\n\n"
+        table += "| Product | Qty | Price | Total |\n"
+        table += "|---------|-----|-------|-------|\n"
+            
+        for item in cart_items:
+            table += f"| {item['product_name']} | {item['quantity']} | ${item['price_per_unit']:.2f} | ${item['total_price']:.2f} |\n"
+            
+        total = sum(item["total_price"] for item in cart_items)
+        table += f"\n**Total: ${total:.2f}**"
+        return table
 
     def _generate_response(chat_history, log_history):
         log.info(f"log_history {log_history}")
@@ -190,8 +183,8 @@ def run_app(agent):
         log_entries = "\n".join(formatted_output)
         thought_process_log = f"Thought Process Time: {thought_process_time:.2f} seconds"
         log_history.append(f"{log_entries}\n{thought_process_log}")
-
-        yield chat_history, "\n".join(log_history)  # Yield after the thought process time is captured
+        cart_content = update_cart_display() # update shopping cart
+        yield chat_history, "\n".join(log_history), cart_content  # Yield after the thought process time is captured
 
         # Now capture response generation time
         start_response_time = time.time()
@@ -207,7 +200,7 @@ def run_app(agent):
                 chat_history[-1][1] += token.split()[1] + " "
             else:
                 chat_history[-1][1] += token
-            yield chat_history, "\n".join(log_history)  # Ensure log_history is a string
+            yield chat_history, "\n".join(log_history), cart_content  # Ensure log_history is a string
             if i <= 2: i += 1
 
         end_response_time = time.time()
@@ -221,11 +214,12 @@ def run_app(agent):
 
         # Append the response time to log history
         log_history.append(response_log)
-        yield chat_history, "\n".join(log_history)  # Join logs into a string for display
+        yield chat_history, "\n".join(log_history), cart_content  # Join logs into a string for display
 
     def _reset_chat():
         agent.reset()
-        return "", [], []  # Reset both chat and logs (initialize log as empty list)
+        ShoppingCart._cart_items = []  # Also clear the cart
+        return "", [], update_cart_display()
 
     def run():
         custom_css= """
@@ -236,7 +230,14 @@ def run_app(agent):
                 background-color: #f9f9f9;
                 margin-top: 10px;
             }
-        """
+            #shopping-cart {
+                border: 2px solid #4CAF50;
+                border-radius: 8px;
+                padding: 12px;
+                background-color: #f0f8f0;
+                margin-top: 10px;
+            }
+        """        
         with gr.Blocks(css=custom_css) as demo:
             gr.Markdown("# Smart Retail Assistant 🤖: Agentic LLMs with RAG 💭")
             gr.Markdown("Ask me about paint! 🎨")
@@ -256,6 +257,11 @@ def run_app(agent):
                         height=400,                        
                         elem_id="agent-steps"
                 )
+                cart_display = gr.Markdown(
+                    value=update_cart_display(),
+                    elem_id="shopping-cart"
+                )
+
             with gr.Row():
                 message = gr.Textbox(label="Ask the Paint Expert", scale=4, placeholder="Type your prompt/Question and press Enter")
                 clear = gr.ClearButton()
@@ -269,39 +275,11 @@ def run_app(agent):
             ).then(
                 _generate_response,
                 inputs=[chat_window, log_window],  # Pass individual components, including log_window
-                outputs=[chat_window, log_window],  # Update chatbot and log window
+                outputs=[chat_window, log_window, cart_display],  # Update chatbot and log window
             )
-            clear.click(_reset_chat, None, [message, chat_window, log_window])
+            clear.click(_reset_chat, None, [message, chat_window, log_window, cart_display])
 
-            gr.Markdown("------------------------------")
-            gr.Markdown("### Purchase items")
-
-            cart = gr.State([])
-
-            # Define items with checkbox and numeric quantity
-            items = ["Behr Premium Plus", "AwesomeSplash", "TheBrush", "PaintFinish"]
-
-            global item_components
-            item_components = []
-            for item in items:
-                with gr.Row(equal_height=True):
-                    item_checkbox = gr.Checkbox(label=f"{item}", value=False)
-                    quantity_box = gr.Number(
-                        label=f"{item} Quantity", value=1, precision=0, interactive=False, minimum=1
-                    )
-                    item_checkbox.change(
-                        fn=lambda selected, box=quantity_box: gr.update(interactive=selected, value=1 if selected else 0),
-                        inputs=item_checkbox,
-                        outputs=quantity_box,
-                    )
-                    item_components.append((item_checkbox, quantity_box))
-
-            purchase = gr.Button(value="Add to Cart")
-            cart_size = gr.Number(label="Cart Size", interactive=False)
-            purchased_textbox = gr.Textbox(label="Purchase Action", interactive=False)
-            # Gather inputs from all item checkbox and number box pairs
-            component_inputs = [cart] + [comp for pair in item_components for comp in pair]
-            purchase.click(fn=purchase_click, inputs=component_inputs, outputs=[cart, purchased_textbox, cart_size])
+            gr.Markdown("------------------------------")            
 
         demo.launch()
 
@@ -316,9 +294,8 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
     Settings.llm = llm
 
     # Set up tools
-    multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator = setup_tools()
-
-    # Step 4: Load documents and create the VectorStoreIndex
+    multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator, add_to_cart_tool, get_cart_items_tool, clear_cart_tool = setup_tools()
+    
     text_example_en_path = Path(rag_pdf)
     index = load_documents(text_example_en_path)
     log.info(f"loading in {index}")
@@ -329,8 +306,7 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
             description="Use this first for any questions about paint products or recommendations",
         ),
     )
-
-    # Step 5: Initialize the agent with the loaded tools
+    
     nest_asyncio.apply()
 
     # Load agent config
@@ -381,9 +357,9 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
     log.info(f"Using combined prompt: {combined_prompt}")
     # Define agent and available tools
     agent = ReActAgent.from_tools(
-        [multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator, vector_tool],
+        [multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator, vector_tool, add_to_cart_tool, get_cart_items_tool, clear_cart_tool],
         llm=llm,
-        max_iterations=5,  # Set a max_iterations value
+        max_iterations=3,  # Set a max_iterations value
         handle_reasoning_failure_fn=custom_handle_reasoning_failure,
         verbose=True,
         system_prompt=combined_prompt

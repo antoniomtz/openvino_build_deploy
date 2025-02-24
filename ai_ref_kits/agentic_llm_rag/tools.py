@@ -42,3 +42,67 @@ class PaintCostCalculator:
         if add_paint_supply_costs:
             total_cost += 50
         return total_cost
+
+class ShoppingCart:
+    # In-memory shopping cart
+    _cart_items = []
+    
+    @staticmethod
+    def add_to_cart(product_name: str, quantity: int, price_per_unit: float) -> dict:
+        """
+        Add an item to the shopping cart.
+        
+        Args:
+            product_name: Name of the paint product
+            quantity: Number of units/gallons
+            price_per_unit: Price per unit/gallon
+            
+        Returns:
+            Dict with confirmation message and current cart items
+        """
+        item = {
+            "product_name": product_name,
+            "quantity": quantity,
+            "price_per_unit": price_per_unit,
+            "total_price": round(quantity * price_per_unit, 2)
+        }
+        
+        # Check if item already exists
+        for existing_item in ShoppingCart._cart_items:
+            if existing_item["product_name"] == product_name:
+                # Update quantity
+                existing_item["quantity"] += quantity
+                existing_item["total_price"] = round(existing_item["quantity"] * existing_item["price_per_unit"], 2)
+                return {
+                    "message": f"Updated {product_name} quantity to {existing_item['quantity']} in your cart",
+                    "cart": ShoppingCart._cart_items
+                }
+        
+        # Add new item
+        ShoppingCart._cart_items.append(item)
+        
+        return {
+            "message": f"Added {quantity} {product_name} to your cart",
+            "cart": ShoppingCart._cart_items
+        }
+    
+    @staticmethod
+    def get_cart_items() -> list:
+        """
+        Get all items currently in the shopping cart.
+        
+        Returns:
+            List of items in the cart with their details
+        """
+        return ShoppingCart._cart_items
+    
+    @staticmethod
+    def clear_cart() -> dict:
+        """
+        Clear all items from the shopping cart.
+        
+        Returns:
+            Confirmation message
+        """
+        ShoppingCart._cart_items = []
+        return {"message": "Shopping cart has been cleared"}
