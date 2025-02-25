@@ -23,6 +23,8 @@ from llama_index.core.tools import FunctionTool
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.embeddings.huggingface_openvino import OpenVINOEmbedding
 from llama_index.llms.openvino import OpenVINOLLM
+from llama_index.core.agent import ReActChatFormatter
+from llama_index.core.llms import MessageRole
 
 from tools import Math, PaintCostCalculator, ShoppingCart
 
@@ -41,8 +43,8 @@ ov_config = {
     props.cache_dir(): ""
 }
 
-def qwen_completion_to_prompt(completion):
-    return f"<|im_start|>system\nYou are a helpful Paint Concierge assistant.<|im_end|>\n<|im_start|>user\n{completion}<|im_end|>\n<|im_start|>assistant\n"
+def qwen_completion_to_prompt(completion, system_prompt="You are useful Paint assistant."):
+    return f"system\n{system_prompt}\nuser\n{completion}\nassistant\n"
 
 def phi_completion_to_prompt(completion):
     return f"<|system|><|end|><|user|>{completion}<|end|><|assistant|>\n"
@@ -219,7 +221,7 @@ def run_app(agent):
     def _reset_chat():
         agent.reset()
         ShoppingCart._cart_items = []  # Also clear the cart
-        return "", [], update_cart_display()
+        return "", [], "🤔 Agent's Thought Process", update_cart_display()
 
     def run():
         custom_css= """
@@ -315,73 +317,87 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
     with open(personality_file_path, "rb") as f:
         chatbot_config = yaml.safe_load(f)
 
-    react_system_prompt = PromptTemplate(chatbot_config['system_configuration'])
-    log.info(f"react_system_prompt {react_system_prompt}")
+    # Extract both prompts from the YAML file
+    system_prompt = PromptTemplate(chatbot_config['system_configuration'])    
 
-    react_prompt = PromptTemplate("""
-        When responding, STRICTLY follow this format:
+    log.info(f"System prompt: {system_prompt}")        
 
-    1. For questions about paint quantity:
-       Thought: I need the room size in square feet to calculate paint needed
-       If size unknown: Ask for room dimensions (length and width in feet)
-       If size known: 
-           Action: calculate_paint_cost
-           Action Input: [room size in square feet]
-           Observation: [tool output]
-           Final Answer: Based on the calculations...
-
-    2. For product recommendations:
-       Thought: Do I have enough details about [room type, color, finish]?
-       If no: Ask for missing details
-       If yes:
-           Action: vector_search
-           Action Input: [specific search criteria]
-           Observation: [tool output]
-           Final Answer: Based on your requirements...
-
-    3. For questions about paint colors or finishes:
-       Action: vector_search
-       Action Input: [specific color/finish query]
-       Observation: [tool output]
-       Final Answer: Based on our product database...
-
-    IMPORTANT:
-    - NEVER calculate paint quantity without room dimensions
-    - ALWAYS ask for missing information before using tools
-    - If a question requires calculations, first confirm you have all needed measurements
-    - Keep responses focused and directly address the user's question
-    """)
-
-    #combined_prompt = PromptTemplate(f"{react_system_prompt}\n\n{react_prompt}\n\nBegin now:\n{{query}}")
-    combined_prompt = PromptTemplate(f"{react_system_prompt}\n\nBegin now:\n{{query}}")
-    log.info(f"Using combined prompt: {combined_prompt}")
     # Define agent and available tools
     agent = ReActAgent.from_tools(
-        [multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator, vector_tool, add_to_cart_tool, get_cart_items_tool, clear_cart_tool],
+        [multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator, add_to_cart_tool, get_cart_items_tool, clear_cart_tool, vector_tool],
         llm=llm,
-        max_iterations=3,  # Set a max_iterations value
+        max_iterations=5,  # Set a max_iterations value
         handle_reasoning_failure_fn=custom_handle_reasoning_failure,
-        verbose=True,
-        system_prompt=combined_prompt
-        )
+        verbose=True   
+    )
 
-    tool_prompts = {
-        "task_decomposition_prompt": "To answer this question, I must: 1. Use vector_search to find information, 2. Use calculation tools if needed",
-        "observation_prompt": "Based ONLY on the tool's output above, without adding any information:",
-        "solution_prompt": "Using ONLY the information from the tools, I can now answer that:"
-    }
+    react_system_header_str = """\
+
+        You are a personal virtual shopper for a paint store. You job is to always ask questions at the end of your message to engage with the customer and have a good shopping experience.
+        Engage with the customer by suggesting related products and offering assistance in completing their shopping cart, even if the customer doesn’t explicitly instruct you to add items.
+        You are a helpful, respectful, and knowledgeable Paint Concierge working at a retail store, where customer experience is absolutely crucial.
+        Your role is to assist customers with inquiries about paint suggestions, price details, supply calculations, product recommendations based on the knowledge and documents provided to you.
+
+        ## Tools
+        You have access to a wide variety of tools. You are responsible for using
+        the tools in any sequence you deem appropriate to complete the task at hand.
+        This may require breaking the task into subtasks and using different tools
+        to complete each subtask.
+
+        You have access to the following tools:
+        {tool_desc}
+
+        ## Output Format
+        To answer the question, please use the following format.
+
+        ```
+        Thought: I need to use a tool to help me answer the question.
+        Action: tool name (one of {tool_names}) if using a tool.
+        Action Input: the input to the tool, in a JSON format representing the kwargs (e.g. {{"input": "hello world", "num_beams": 5}})
+        ```
+
+        Please ALWAYS start with a Thought.
+
+        Please use a valid JSON format for the Action Input. Do NOT do this {{'input': 'hello world', 'num_beams': 5}}.
+
+        If this format is used, the user will respond in the following format:
+
+        ```
+        Observation: tool response
+        ```
+
+        You should keep repeating the above format until you have enough information
+        to answer the question without using any more tools. At that point, you MUST respond
+        in the one of the following two formats:
+
+        ```
+        Thought: I can answer without using any more tools.
+        Answer: [your answer here]
+        ```
+
+        ```
+        Thought: I cannot answer the question with the provided tools.
+        Answer: Sorry, I cannot answer your query.
+        ```
+
+        ## Additional Rules        
+        - You MUST obey the function signature of each tool. Do NOT pass in no arguments if the function expects arguments.        
+
+        ## Current Conversation
+        Below is the current conversation consisting of interleaving human and assistant messages.
+
+        """
+    react_system_prompt = PromptTemplate(react_system_header_str)
     
-    agent.update_prompts(tool_prompts)
-
-    # Step 6: Run the app
+    #agent.update_prompts({"agent_worker:system_prompt": react_system_prompt})
+    
     run_app(agent)
-
 
 if __name__ == "__main__":
     # Define the argument parser at the end
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chat_model", type=str, default="model/qwen2-7B-INT4", help="Path to the chat model directory")
-    parser.add_argument("--embedding_model", type=str, default="model/bge-large-FP32", help="Path to the embedding model directory")
+    parser.add_argument("--chat_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/qwen2-7B-INT4", help="Path to the chat model directory")
+    parser.add_argument("--embedding_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/bge-large-FP32", help="Path to the embedding model directory")
     parser.add_argument("--rag_pdf", type=str, default="data/test_painting_llm_rag.pdf", help="Path to a RAG PDF file with additional knowledge the chatbot can rely on.")
     parser.add_argument("--personality", type=str, default="config/paint_concierge_personality.yaml", help="Path to the yaml file with chatbot personality")
 
