@@ -85,7 +85,7 @@ def setup_tools():
     add_to_cart_tool = FunctionTool.from_defaults(
         fn=ShoppingCart.add_to_cart,
         name="add_items_to_shopping_cart",
-        description="Use this tool to add items to the cart. Add a product to a user's shopping cart. "
+        description="Use this tool to add items to the cart"
         "Required parameters include: "
         "- product_name (string): The name of the paint product. "
         "- quantity (int): The number of units to add. "
@@ -253,7 +253,7 @@ def run_app(agent):
                 chat_window = gr.Chatbot(
                     label="Paint Purchase Helper",
                     avatar_images=(None, "https://docs.openvino.ai/2024/_static/favicon.ico"),
-                                height=400,  # Adjust height as per your preference
+                    height=400,  # Adjust height as per your preference
                     scale=2  # Set a higher scale value for Chatbot to make it wider
                     #autoscroll=True,  # Enable auto-scrolling for better UX
                 )            
@@ -278,7 +278,7 @@ def run_app(agent):
                 _handle_user_message,
                 inputs=[message, chat_window],
                 outputs=[message, chat_window],
-                queue=False,
+                queue=False                
             ).then(
                 _generate_response,
                 inputs=[chat_window, log_window],  # Pass individual components, including log_window
@@ -310,7 +310,7 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
         index.as_query_engine(streaming=True),
         metadata=ToolMetadata(
             name="vector_search",
-            description="Use this first for any questions about paint products or recommendations",
+            description="Use this for any questions about paint products or recommendations",
         ),
     )
     
@@ -320,87 +320,27 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
     personality_file_path = Path(personality)
 
     with open(personality_file_path, "rb") as f:
-        chatbot_config = yaml.safe_load(f)
-
-    # Extract both prompts from the YAML file
-    system_prompt = PromptTemplate(chatbot_config['system_configuration'])    
-
-    log.info(f"System prompt: {system_prompt}")        
-
+        chatbot_config = yaml.safe_load(f)    
+  
     # Define agent and available tools
     agent = ReActAgent.from_tools(
         [multiply_tool, divide_tool, add_tool, subtract_tool, paint_cost_calculator, add_to_cart_tool, get_cart_items_tool, clear_cart_tool, vector_tool],
         llm=llm,
         max_iterations=5,  # Set a max_iterations value
         handle_reasoning_failure_fn=custom_handle_reasoning_failure,
-        verbose=True   
-    )
-
-    react_system_header_str = """\
-
-        You are designed to help with a variety of tasks, from answering questions to providing summaries to other types of analyses.
-               
-        ## Tools
-        You have access to a wide variety of tools. You are responsible for using
-        the tools in any sequence you deem appropriate to complete the task at hand.
-        This may require breaking the task into subtasks and using different tools
-        to complete each subtask.
-
-        You have access to the following tools:
-        {tool_desc}
-
-        ## Output Format
-        To answer the question, please use the following format.
-
-        ```
-        Thought: I need to use a tool to help me answer the question.
-        Action: tool name (one of {tool_names}) if using a tool.
-        Action Input: the input to the tool, in a JSON format representing the kwargs (e.g. {{"input": "hello world", "num_beams": 5}})
-        ```
-
-        Please ALWAYS start with a Thought.
-
-        Please use a valid JSON format for the Action Input. Do NOT do this {{'input': 'hello world', 'num_beams': 5}}.
-
-        If this format is used, the user will respond in the following format:
-
-        ```
-        Observation: tool response
-        ```
-
-        You should keep repeating the above format until you have enough information
-        to answer the question without using any more tools. At that point, you MUST respond
-        in the one of the following two formats:
-
-        ```
-        Thought: I can answer without using any more tools.
-        Answer: [your answer here]
-        ```
-
-        ```
-        Thought: I cannot answer the question with the provided tools.
-        Answer: Sorry, I cannot answer your query.
-        ```
-
-        ## Additional Rules
-        - Make sure you efficiently use all {tool_names} to achive your goal. DO NOT roleplay. You MUST usee the tools as instructed for any query.
-        - After making product recommendations ALWAYS ask the customer if they would like to add the recommended products to their cart
-
-        ## Current Conversation
-        Below is the current conversation consisting of interleaving human and assistant messages.
-
-        """
-    react_system_prompt = PromptTemplate(react_system_header_str)
-    
-    agent.update_prompts({"agent_worker:system_prompt": react_system_prompt})
-    
+        verbose=True,
+        react_chat_formatter=ReActChatFormatter.from_defaults(
+            context="You will use vector_search tool to find prices, and you will use add_items_to_shopping_cart to add products", # ReactAgent uses a default system prompt, this is just to expand the context
+            observation_role=MessageRole.TOOL          
+        ),
+    )                        
     run_app(agent)
 
 if __name__ == "__main__":
     # Define the argument parser at the end
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chat_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/qwen2-7B-INT4", help="Path to the chat model directory")
-    parser.add_argument("--embedding_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/bge-large-FP32", help="Path to the embedding model directory")
+    parser.add_argument("--chat_model", type=str, default="model/qwen2-7B-INT4", help="Path to the chat model directory")
+    parser.add_argument("--embedding_model", type=str, default="model/bge-large-FP32", help="Path to the embedding model directory")
     parser.add_argument("--rag_pdf", type=str, default="data/test_painting_llm_rag.pdf", help="Path to a RAG PDF file with additional knowledge the chatbot can rely on.")
     parser.add_argument("--personality", type=str, default="config/paint_concierge_personality.yaml", help="Path to the yaml file with chatbot personality")
 
