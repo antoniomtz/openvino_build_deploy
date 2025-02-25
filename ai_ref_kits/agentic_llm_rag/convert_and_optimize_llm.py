@@ -9,16 +9,8 @@ from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction, OVWei
 from transformers import AutoTokenizer
 
 MODEL_MAPPING = {
-    "llama3-8B": "meta-llama/Meta-Llama-3-8B-Instruct",
-    "llama3.1-8B": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-    "llama3.2-3B": "meta-llama/Llama-3.2-3B-Instruct",
-    "llama3.2-11B": "meta-llama/Llama-3.2-11B-Vision-Instruct",
-    "llama2-7B": "meta-llama/Llama-2-7b-chat-hf",
-    "llama2-13B": "meta-llama/Llama-2-13b-chat-hf",
     "qwen2-7B": "Qwen/Qwen2-7B-Instruct",
-    "bge-small": "BAAI/bge-small-en-v1.5",
     "bge-large": "BAAI/bge-large-en-v1.5",
-    "bge-m3": "BAAI/bge-m3",
 }
 
 def optimize_model_for_npu(model: OVModelForFeatureExtraction):
@@ -131,9 +123,9 @@ def convert_embedding_model(model_type: str, model_dir: Path) -> Path:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chat_model_type", type=str, choices=["llama2-7B", "llama2-13B", "llama3-8B", "llama3.1-8B", "llama3.2-3B", "llama3.2-11B", "qwen2-7B"],
+    parser.add_argument("--chat_model_type", type=str, choices=["qwen2-7B"],
                         default="llama3.1-8B", help="Chat model to be converted")
-    parser.add_argument("--embedding_model_type", type=str, choices=["bge-small", "bge-large", "bge-m3"],
+    parser.add_argument("--embedding_model_type", type=str, choices=["bge-large"],
                         default="bge-large", help="Embedding model to be converted")
     parser.add_argument("--precision", type=str, default="int4", choices=["fp16", "int8", "int4"], help="Model precision")
     parser.add_argument("--hf_token", type=str, help="HuggingFace access token to get Llama3")
