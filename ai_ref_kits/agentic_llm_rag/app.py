@@ -84,14 +84,19 @@ def setup_tools():
     )
     add_to_cart_tool = FunctionTool.from_defaults(
         fn=ShoppingCart.add_to_cart,
-        name="add_to_cart",
-        description="Add a paint product to the customer's shopping cart. Required inputs: product_name (string), quantity (int), price_per_unit (float)"
+        name="add_items_to_shopping_cart",
+        description="Use this tool to add items to the cart. Add a product to a user's shopping cart. "
+        "Required parameters include: "
+        "- product_name (string): The name of the paint product. "
+        "- quantity (int): The number of units to add. "
+        "- price_per_unit (float): The cost for each unit. "
+        "This function ensures a seamless update to the shopping cart by specifying each required input clearly."
     )
     
     get_cart_items_tool = FunctionTool.from_defaults(
         fn=ShoppingCart.get_cart_items,
         name="get_cart_items",
-        description="Retrieve all items currently in the customer's shopping cart. No inputs required."
+        description="Retrieve all items currently in the user's shopping cart. No inputs required."
     )
     
     clear_cart_tool = FunctionTool.from_defaults(
@@ -333,11 +338,8 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
 
     react_system_header_str = """\
 
-        You are a personal virtual shopper for a paint store. You job is to always ask questions at the end of your message to engage with the customer and have a good shopping experience.
-        Engage with the customer by suggesting related products and offering assistance in completing their shopping cart, even if the customer doesn’t explicitly instruct you to add items.
-        You are a helpful, respectful, and knowledgeable Paint Concierge working at a retail store, where customer experience is absolutely crucial.
-        Your role is to assist customers with inquiries about paint suggestions, price details, supply calculations, product recommendations based on the knowledge and documents provided to you.
-
+        You are designed to help with a variety of tasks, from answering questions to providing summaries to other types of analyses.
+               
         ## Tools
         You have access to a wide variety of tools. You are responsible for using
         the tools in any sequence you deem appropriate to complete the task at hand.
@@ -380,8 +382,9 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
         Answer: Sorry, I cannot answer your query.
         ```
 
-        ## Additional Rules        
-        - You MUST obey the function signature of each tool. Do NOT pass in no arguments if the function expects arguments.        
+        ## Additional Rules
+        - Make sure you efficiently use all {tool_names} to achive your goal. DO NOT roleplay. You MUST usee the tools as instructed for any query.
+        - After making product recommendations ALWAYS ask the customer if they would like to add the recommended products to their cart
 
         ## Current Conversation
         Below is the current conversation consisting of interleaving human and assistant messages.
@@ -389,7 +392,7 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str):
         """
     react_system_prompt = PromptTemplate(react_system_header_str)
     
-    #agent.update_prompts({"agent_worker:system_prompt": react_system_prompt})
+    agent.update_prompts({"agent_worker:system_prompt": react_system_prompt})
     
     run_app(agent)
 

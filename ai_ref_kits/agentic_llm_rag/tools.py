@@ -51,6 +51,8 @@ class ShoppingCart:
     def add_to_cart(product_name: str, quantity: int, price_per_unit: float) -> dict:
         """
         Add an item to the shopping cart.
+        Add a product to a user's shopping cart.
+        This function ensures a seamless update to the shopping cart by specifying each required input clearly.
         
         Args:
             product_name: Name of the paint product
