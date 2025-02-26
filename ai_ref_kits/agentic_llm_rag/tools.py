@@ -1,6 +1,6 @@
 import math
 
-class PaintCostCalculator:
+class PaintCalculator:
 
     @staticmethod
     def calculate_paint_cost(area: float, price_per_gallon: float, add_paint_supply_costs: bool = False) -> float:
@@ -20,6 +20,21 @@ class PaintCostCalculator:
         if add_paint_supply_costs:
             total_cost += 50
         return total_cost
+
+    @staticmethod
+    def calculate_paint_gallons_needed(area: float) -> int:
+        """
+        Calculate the number of gallons of paint needed for a given area.
+        
+        Args:
+            area: Area to be painted in square feet
+            
+        Returns:
+            Number of gallons needed (rounded up to ensure coverage)
+        """
+        # Using the same formula as in PaintCostCalculator: 2 gallons needed for 400 square feet
+        gallons_needed = math.ceil((area / 400) * 2)
+        return gallons_needed
 
 class ShoppingCart:
     # In-memory shopping cart
