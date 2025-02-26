@@ -25,10 +25,9 @@ from llama_index.embeddings.huggingface_openvino import OpenVINOEmbedding
 from llama_index.llms.openvino import OpenVINOLLM
 from llama_index.core.agent import ReActChatFormatter
 from llama_index.core.llms import MessageRole
-from llama_index.core.response_synthesizers import get_response_synthesizer
-from llama_index.core.postprocessor import SimilarityPostprocessor
 # Agent tools
 from tools import PaintCalculator, ShoppingCart
+from system_prompt import react_system_header_str
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -43,18 +42,18 @@ ov_config = {
     props.cache_dir(): ""
 }
 
-def qwen_completion_to_prompt(completion, system_prompt="You are useful Paint assistant with access to different tools."):
-    return f"system\n{system_prompt}\nuser\n{completion}\nassistant\n"
+# def qwen_completion_to_prompt(completion, system_prompt=""):
+#     return f"system\n{system_prompt}\nuser\n{completion}\nassistant\n"
 
 def setup_models(llm_model_path, embedding_model_path, device):
     # Load the Llama model locally
     llm = OpenVINOLLM(
         model_id_or_path=str(llm_model_path),
-        context_window=4096,
+        context_window=8192,
         max_new_tokens=500,
         model_kwargs={"ov_config": ov_config},
         generate_kwargs={"do_sample": False, "temperature": 0.1, "top_p": 0.8},
-        completion_to_prompt=qwen_completion_to_prompt,        
+        #completion_to_prompt=qwen_completion_to_prompt,        
         device_map=device,
     )
 
@@ -69,7 +68,7 @@ def setup_tools():
     paint_cost_calculator = FunctionTool.from_defaults(
         fn=PaintCalculator.calculate_paint_cost,
         name="calculate_paint_cost",
-        description="Calculate paint cost for a given area. Required inputs: area (float, square feet), price_per_gallon (float), add_paint_supply_costs (bool)"
+        description="ALWAYS use this tool when calculating paint cost for a specific area in square feet. Required inputs: area (float, square feet), price_per_gallon (float), add_paint_supply_costs (bool)"
     )
 
     paint_gallons_calculator = FunctionTool.from_defaults(
@@ -82,7 +81,7 @@ def setup_tools():
         fn=ShoppingCart.add_to_cart,
         name="add_to_cart",
         description="""
-        Use this tool WHENEVER a user wants to add any item to their shopping cart.
+        Use this tool WHENEVER a user wants to add any item to their cart or shopping cart.
         
         PARAMETERS:
         - product_name (string): The exact name of the product (e.g., "Premium Latex Paint")
@@ -132,7 +131,7 @@ def setup_tools():
 def load_documents(text_example_en_path):
     # Check and download document if not present
     if not text_example_en_path.exists():
-        text_example_en = "test_painting_llm_rag.pdf"  # TBD - Replace with valid URL
+        text_example_en = "test_painting_llm_rag.pdf"
         r = requests.get(text_example_en)
         content = io.BytesIO(r.content)
         with open(text_example_en_path, "wb") as f:
@@ -184,31 +183,31 @@ def run_app(agent):
         estimated_tokens = sum(len(msg[0].split()) + len(msg[1].split()) for msg in chat_history) * 1.3
     
         # Add checkpoint counter to track interactions
-        if not hasattr(_generate_response, 'interaction_count'):
-            _generate_response.interaction_count = 0
+        # if not hasattr(_generate_response, 'interaction_count'):
+        #     _generate_response.interaction_count = 0
         
-        _generate_response.interaction_count += 1
+        # _generate_response.interaction_count += 1
         
         # Force reset every few interactions regardless of estimated token count
-        if _generate_response.interaction_count >= 4:  # Reset after 4 interactions
-            log.info("Performing preventative agent reset after 4 interactions")
+        # if _generate_response.interaction_count >= 5:  # Reset after 4 interactions
+        #     log.info("Performing preventative agent reset after 4 interactions")
             
-            # Save important state
-            current_cart = ShoppingCart.get_cart_items()
+        #     # Save important state
+        #     current_cart = ShoppingCart.get_cart_items()
             
-            # Reset agent
-            agent.reset()
+        #     # Reset agent
+        #     agent.reset()
             
-            # Restore cart
-            for item in current_cart:
-                ShoppingCart.add_to_cart(
-                    item["product_name"], 
-                    item["quantity"], 
-                    item["price_per_unit"]
-                )
+        #     # Restore cart
+        #     for item in current_cart:
+        #         ShoppingCart.add_to_cart(
+        #             item["product_name"], 
+        #             item["quantity"], 
+        #             item["price_per_unit"]
+        #         )
             
-            # Reset counter
-            _generate_response.interaction_count = 0
+        #     # Reset counter
+        #     _generate_response.interaction_count = 0
         if not isinstance(log_history, list):
             log_history = []
 
@@ -356,24 +355,9 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str, 
     text_example_en_path = Path(rag_pdf)
     index = load_documents(text_example_en_path)
     log.info(f"loading in {index}")
-
-    # Compress RAG Calls
-    response_synthesizer = get_response_synthesizer(
-        response_mode="compact",  # More concise responses
-        use_async=True,  # Better performance
-    )
-    
-    # Create query engine with optimizations
-    query_engine = index.as_query_engine(
-        streaming=True,
-        similarity_top_k=3,  # Limit number of retrieved documents
-        node_postprocessors=[
-            SimilarityPostprocessor(similarity_cutoff=0.7)  # Only use relevant results
-        ],
-        response_synthesizer=response_synthesizer
-    )
+ 
     vector_tool = QueryEngineTool(
-        query_engine,
+        index.as_query_engine(streaming=True),
         metadata=ToolMetadata(
             name="vector_search",
             description="""            
@@ -410,16 +394,19 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str, 
         verbose=True,
         react_chat_formatter=ReActChatFormatter.from_defaults(
             # ReactAgent uses a default system prompt, this is just to expand the context
-            context=chatbot_config["system_configuration"],
+            #context=chatbot_config["system_configuration"],
             observation_role=MessageRole.TOOL          
         ),
-    )                        
+    ) 
+    react_system_prompt = PromptTemplate(react_system_header_str)
+    agent.update_prompts({"agent_worker:system_prompt": react_system_prompt})  
+    agent.reset()                     
     run_app(agent)
 
 if __name__ == "__main__":
     # Define the argument parser at the end
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chat_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/qwen2.5-7B-INT4", help="Path to the chat model directory")
+    parser.add_argument("--chat_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/qwen2-7B-INT4", help="Path to the chat model directory")
     parser.add_argument("--embedding_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/bge-large-FP32", help="Path to the embedding model directory")
     parser.add_argument("--rag_pdf", type=str, default="data/test_painting_llm_rag.pdf", help="Path to a RAG PDF file with additional knowledge the chatbot can rely on.")
     parser.add_argument("--personality", type=str, default="config/paint_concierge_personality.yaml", help="Path to the yaml file with chatbot personality")

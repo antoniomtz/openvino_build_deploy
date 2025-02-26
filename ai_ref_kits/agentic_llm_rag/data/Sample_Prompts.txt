@@ -1,14 +1,21 @@
 *Sample prompts*
 
-Paint Calculations:
-- how many gallons of paint do I need to cover 600 sq ft ?
-
-Shopping Cart:
-- add them to my cart
-- add some glove to my cart
-- clear shopping cart
+These are sample prompts that would work depends on the context.
 
 RAG:
-- paint products sorted by price
-- what paint is the best for kitchen cabinets?
-- hello, I want to paint my room. The size is 500 sqft. which products do you recommend?
+- create a table with paint products sorted by price
+- what paint is the best for kitchens?
+- what else do I need to complete my project?
+- I want to paint my room. The size is 500 sqft. which products do you recommend?
+
+Paint Calculations:
+- how many gallons of paint do I need to cover 600 sq ft ?
+- Calculate the paint cost for a 600 sqft room using AwesomeSplash Interior
+
+Shopping Cart:
+- add 3 gallons of Benjamin Moore Aura Revere Pewter to my cart
+- add 3 gallons of that paint to my cart
+- add brushes to my cart
+- add gloves to my cart
+- clear shopping cart
+- I want to see my current cart
