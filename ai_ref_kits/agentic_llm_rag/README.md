@@ -12,7 +12,7 @@
   <img src="https://github.com/user-attachments/assets/dd626685-7aa6-4e67-a929-5e9be2982800" width="500">
 </p>
 
-The AI Insight Agent with RAG uses Large Language Models (LLMs) and Retrieval-Augmented Generation (RAG) to interpret user prompts, engage in meaningful dialogue, perform calculations, use RAG techniques to improve its knowledge and interact with the user to add items to a virtual shopping cart. This solution uses the OpenVINO™ toolkit to power a streamlined, voice-activated interface. Designed for both consumers and employees, it functions as a smart, personalized retail assistant, offering an interactive and user-friendly experience similar to an advanced digital kiosk.
+The AI Insight Agent with RAG uses Large Language Models (LLMs) and Retrieval-Augmented Generation (RAG) to interpret user prompts, engage in meaningful dialogue, perform calculations, use RAG techniques to improve its knowledge and interact with the user to add items to a virtual shopping cart. This solution uses the OpenVINO™ toolkit to power the AI models at the edge. Designed for both consumers and employees, it functions as a smart, personalized retail assistant, offering an interactive and user-friendly experience similar to an advanced digital kiosk.
 
 This kit uses the following technology stack:
 - [OpenVINO Toolkit](https://www.intel.com/content/www/us/en/developer/tools/openvino-toolkit/overview.html) ([docs](https://docs.openvino.ai/))
@@ -22,7 +22,7 @@ This kit uses the following technology stack:
 
 Check out our [AI Reference Kits repository](/) for other kits.
 
-![ai-insight-agent-with-rag](https://github.com/user-attachments/assets/1a7ca6bc-3bde-4e97-be61-83a3709e9b73)
+![ai-insight-agent-with-rag](https://github.com/user-attachments/assets/da97bea7-29e8-497f-b7ba-4e00c79773f1)
 
 <details open><summary><b>Table of Contents</b></summary>
   
@@ -37,7 +37,7 @@ Check out our [AI Reference Kits repository](/) for other kits.
 
 # Getting Started
 
-To get started with the AI Insight Agent with RAG, you install Python, set up your environment, and then you can run the application. We recommend using Ubuntu to set up and run this project.
+To get started with the AI Insight Agent with RAG, you install Python, set up your environment, and then you can run the application. We recommend using Ubuntu 24.04 to set up and run this project.
 
 ## Installing Prerequisites
 
@@ -127,8 +127,6 @@ After the models are converted, they’re saved to the model directory you speci
 
 _Requests can take up to one hour to process._
 
-After you get access to the Llama model weights, you can convert the chat and embedding models.
-
 To convert the chat and embedding models, run:
 ```shell
 python convert_and_optimize_llm.py --chat_model_type qwen2-7B --embedding_model_type bge-large --precision int4 --model_dir model
@@ -142,13 +140,13 @@ To run the AI Insight Agent with RAG application, you execute the following pyth
 
 _NOTE: This application requires more than 16GB of memory because the models are very large (especially the chatbot model). If you have a less powerful device, the application might also run slowly._
 
-After that, you should be able to run the application with some default values:
+After that, you should be able to run the application with default values:
 
 ```shell
 python app.py
 ```
 
-For more advance settings, you can change some argument values:
+For more settings, you can change the argument values:
 
 - `--chat_model`: The path to your chat model directory (for example, `model/qwen2-7B-INT4`) that drives conversation flow and response generation.
 
@@ -166,27 +164,19 @@ python app.py \
   --chat_model model/qwen2-7B-INT4 \
   --embedding_model data/test_painting_llm_rag.pdf \
   --rag_pdf model/bge-small-FP32 \  
-  --device GPU \
+  --device GPU.1 \
   --public
 ```
 
-### Improve System Prompt personality
+### System Prompt Usage in LlamaIndex ReActAgent
 
-When using LLamaIndex ReActAgent library, 
+The LlamaIndex ReActAgent library relies on a default system prompt that provides essential instructions to the LLM for correctly interacting with available tools. This prompt is fundamental for enabling both tool usage and RAG (Retrieval-Augmented Generation) queries.
 
-#### Components of a Personality File
+#### Important:
+Do not override or modify the default system prompt. Altering it may prevent the LLM from using the tools or executing RAG queries properly.
 
-```yaml
-instructions: | 
-  # [Assistant Name]: [Brief Role Description]
-
-        Instructions for use:  
-        1. Provide a brief step-by-step guide for how the assistant works.  
-        2. Include key points the user should know before they interact with the assistant.  
-        3. Mention any important disclaimers, if applicable.
-
-        **Note: [Add a disclaimer or key note about what the assistant can and cannot do].**
-```
+#### Customizing the Prompt:
+If you need to add extra rules or custom behavior, modify the Additional Rules section located in the system_prompt.py file.
 
 ### Use the Web Interface
 After the script runs, Gradio provides a local URL (typically `http://127.0.0.1:XXXX`) that you can open in your web browser to interact with the assistant. If you configured the application to be accessible publicly, Gradio also provides a public URL.

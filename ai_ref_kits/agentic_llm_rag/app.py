@@ -164,12 +164,28 @@ def run_app(agent):
             return "### 🛒 Your Shopping Cart is Empty"
             
         table = "### 🛒 Your Shopping Cart\n\n"
-        table += "| Product | Qty | Price | Total |\n"
-        table += "|---------|-----|-------|-------|\n"
+        table += "<table>\n"
+        table += "  <thead>\n"
+        table += "    <tr>\n"
+        table += "      <th>Product</th>\n"
+        table += "      <th>Qty</th>\n"
+        table += "      <th>Price</th>\n"
+        table += "      <th>Total</th>\n"
+        table += "    </tr>\n"
+        table += "  </thead>\n"
+        table += "  <tbody>\n"
             
         for item in cart_items:
-            table += f"| {item['product_name']} | {item['quantity']} | ${item['price_per_unit']:.2f} | ${item['total_price']:.2f} |\n"
+            table += "    <tr>\n"
+            table += f"      <td>{item['product_name']}</td>\n"
+            table += f"      <td>{item['quantity']}</td>\n"
+            table += f"      <td>${item['price_per_unit']:.2f}</td>\n"
+            table += f"      <td>${item['total_price']:.2f}</td>\n"
+            table += "    </tr>\n"
             
+        table += "  </tbody>\n"
+        table += "</table>\n"
+        
         total = sum(item["total_price"] for item in cart_items)
         table += f"\n**Total: ${total:.2f}**"
         return table
@@ -206,6 +222,7 @@ def run_app(agent):
 
         # After response is complete, show the captured logs in the log area
         log_entries = "\n".join(formatted_output)
+        log_history.append("### 🤔 Agent's Thought Process")
         thought_process_log = f"Thought Process Time: {thought_process_time:.2f} seconds"
         log_history.append(f"{log_entries}\n{thought_process_log}")
         cart_content = update_cart_display() # update shopping cart
@@ -247,25 +264,28 @@ def run_app(agent):
         return "", [], "🤔 Agent's Thought Process", update_cart_display()
 
     def run():
-        custom_css= """
-            #agent-steps {
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                padding: 12px;
-                background-color: #f9f9f9;
-                margin-top: 10px;
-            }
-            #shopping-cart {
-                border: 2px solid #4CAF50;
-                border-radius: 8px;
-                padding: 12px;
-                background-color: #f0f8f0;
-                margin-top: 10px;
-            }
-        """        
-        with gr.Blocks(css=custom_css) as demo:
-            gr.Markdown("# Smart Retail Assistant 🤖: Agentic LLMs with RAG 💭")
-            gr.Markdown("Ask me about paint! 🎨")
+        custom_css = ""
+        try:
+            with open("css/gradio.css", "r") as css_file:
+                custom_css = css_file.read()            
+        except Exception as e:            
+            log.warning(f"Could not load CSS file: {e}")
+
+        theme = gr.themes.Default(
+            primary_hue="blue",
+            font=[gr.themes.GoogleFont("Montserrat"), "ui-sans-serif", "sans-serif"],
+        )
+
+        with gr.Blocks(theme=theme, css=custom_css) as demo:
+
+            header = gr.HTML(
+                        "<div class='intel-header-wrapper'>"
+                        "  <div class='intel-header'>"
+                        "    <img src='https://www.intel.com/content/dam/logos/intel-header-logo.svg' class='intel-logo'></img>"
+                        "    <div class='intel-title'>Smart Retail Assistant 🤖: Agentic LLMs with RAG 💭</div>"
+                        "  </div>"
+                        "</div>"
+            )
 
             with gr.Row():
                 chat_window = gr.Chatbot(
@@ -275,52 +295,43 @@ def run_app(agent):
                     scale=2  # Set a higher scale value for Chatbot to make it wider
                     #autoscroll=True,  # Enable auto-scrolling for better UX
                 )            
-                log_window = gr.Markdown(
-                        label="🤔 Agent's Thought Process",                                            
+                log_window = gr.Markdown(                                                                    
                         show_label=True,                        
-                        value="🤔 Agent's Thought Process",
+                        value="### 🤔 Agent's Thought Process",
                         height=400,                        
                         elem_id="agent-steps"
                 )
                 cart_display = gr.Markdown(
                     value=update_cart_display(),
-                    elem_id="shopping-cart"
+                    elem_id="shopping-cart",
+                    height=400
                 )
 
             with gr.Row():
-                message = gr.Textbox(label="Ask the Paint Expert", scale=4, placeholder="Type your prompt/Question and press Enter")
+                message = gr.Textbox(label="Ask the Paint Expert 🎨", scale=4, placeholder="Type your prompt/Question and press Enter")
 
                 with gr.Column(scale=1):
                     submit_btn = gr.Button("Submit", variant="primary")
                     clear = gr.ClearButton()
-
-            # Add sample prompts
-            with gr.Row():
-                gr.Markdown("### Sample Prompts:")
-                
-            with gr.Row():
-                sample_questions = [
-                    "what paint is the best for kitchens?",
-                    "what is the price of it?",
-                    "how many gallons of paint do I need to cover 600 sq ft ?",
-                    "Calculate the paint cost for a 600 sqft room using Sherwin-Williams Emerald"
-                ]
-                
-                # Create a grid for sample prompts (2 rows, 2 columns)
-                with gr.Column(scale=1):
-                    for i in range(0, len(sample_questions), 2):
-                        with gr.Row():
-                            if i < len(sample_questions):
-                                gr.Button(sample_questions[i]).click(
-                                    lambda q=sample_questions[i]: q,
-                                    outputs=message
-                                )
-                            if i+1 < len(sample_questions):
-                                gr.Button(sample_questions[i+1]).click(
-                                    lambda q=sample_questions[i+1]: q, 
-                                    outputs=message
-                                )
-
+                          
+            sample_questions = [
+                "what paint is the best for kitchens?",
+                "what is the price of it?",
+                "how many gallons of paint do I need to cover 600 sq ft ?",
+                "add them to my cart",
+                "what else do I need to complete my project?",
+                "add 2 brushes to my cart",
+                "create a table with paint products sorted by price",
+                "view my cart",
+                "clear shopping cart",
+                "I have a room 1000 sqft, I'm looking for supplies to paint the room"              
+            ]
+            gr.Examples(
+                examples=sample_questions,
+                inputs=message, 
+                label="Examples"
+            )                     
+            
             # Ensure that individual components are passed
             message.submit(
                 _handle_user_message,
@@ -329,8 +340,8 @@ def run_app(agent):
                 queue=False                
             ).then(
                 _generate_response,
-                inputs=[chat_window, log_window],  # Pass individual components, including log_window
-                outputs=[chat_window, log_window, cart_display],  # Update chatbot and log window
+                inputs=[chat_window, log_window],
+                outputs=[chat_window, log_window, cart_display],
             )
 
             submit_btn.click(
@@ -408,8 +419,8 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str, 
 if __name__ == "__main__":
     # Define the argument parser at the end
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chat_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/qwen2-7B-INT4", help="Path to the chat model directory")
-    parser.add_argument("--embedding_model", type=str, default="/home/antonio/agent/openvino_build_deploy/ai_ref_kits/agentic_llm_rag/model/bge-large-FP32", help="Path to the embedding model directory")
+    parser.add_argument("--chat_model", type=str, default="model/qwen2-7B-INT4", help="Path to the chat model directory")
+    parser.add_argument("--embedding_model", type=str, default="model/bge-large-FP32", help="Path to the embedding model directory")
     parser.add_argument("--rag_pdf", type=str, default="data/test_painting_llm_rag.pdf", help="Path to a RAG PDF file with additional knowledge the chatbot can rely on.")
     parser.add_argument("--personality", type=str, default="config/paint_concierge_personality.yaml", help="Path to the yaml file with chatbot personality")
     parser.add_argument("--device", type=str, default="GPU", help="Device for inferencing (CPU,GPU,GPU.1,NPU)")
