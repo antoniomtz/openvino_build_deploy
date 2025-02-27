@@ -289,7 +289,37 @@ def run_app(agent):
 
             with gr.Row():
                 message = gr.Textbox(label="Ask the Paint Expert", scale=4, placeholder="Type your prompt/Question and press Enter")
-                clear = gr.ClearButton()
+
+                with gr.Column(scale=1):
+                    submit_btn = gr.Button("Submit", variant="primary")
+                    clear = gr.ClearButton()
+
+            # Add sample prompts
+            with gr.Row():
+                gr.Markdown("### Sample Prompts:")
+                
+            with gr.Row():
+                sample_questions = [
+                    "what paint is the best for kitchens?",
+                    "what is the price of it?",
+                    "how many gallons of paint do I need to cover 600 sq ft ?",
+                    "Calculate the paint cost for a 600 sqft room using Sherwin-Williams Emerald"
+                ]
+                
+                # Create a grid for sample prompts (2 rows, 2 columns)
+                with gr.Column(scale=1):
+                    for i in range(0, len(sample_questions), 2):
+                        with gr.Row():
+                            if i < len(sample_questions):
+                                gr.Button(sample_questions[i]).click(
+                                    lambda q=sample_questions[i]: q,
+                                    outputs=message
+                                )
+                            if i+1 < len(sample_questions):
+                                gr.Button(sample_questions[i+1]).click(
+                                    lambda q=sample_questions[i+1]: q, 
+                                    outputs=message
+                                )
 
             # Ensure that individual components are passed
             message.submit(
@@ -301,6 +331,17 @@ def run_app(agent):
                 _generate_response,
                 inputs=[chat_window, log_window],  # Pass individual components, including log_window
                 outputs=[chat_window, log_window, cart_display],  # Update chatbot and log window
+            )
+
+            submit_btn.click(
+                _handle_user_message,
+                inputs=[message, chat_window],
+                outputs=[message, chat_window],
+                queue=False,
+            ).then(
+                _generate_response,
+                inputs=[chat_window, log_window],
+                outputs=[chat_window, log_window, cart_display],
             )
             clear.click(_reset_chat, None, [message, chat_window, log_window, cart_display])
 
@@ -347,12 +388,7 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str, 
     )
     
     nest_asyncio.apply()
-
-    context = """\
-    You are a helpful, respectful, and knowledgeable Paint Employee Concierge working at a retail store, designed to help new employees with their onboarding experience and complex questions from customers.    
-    You will answer questions about paint suggestions, price details, calculations and adding items to a shopping cart in the persona of a paint store employee.
-    """
-  
+ 
     # Define agent and available tools
     agent = ReActAgent.from_tools(
         [paint_cost_calculator, add_to_cart_tool, get_cart_items_tool, clear_cart_tool, vector_tool, paint_gallons_calculator],
@@ -361,8 +397,7 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str, 
         handle_reasoning_failure_fn=custom_handle_reasoning_failure,
         verbose=True,
         react_chat_formatter=ReActChatFormatter.from_defaults(
-            observation_role=MessageRole.TOOL,
-            context=context          
+            observation_role=MessageRole.TOOL   
         ),
     ) 
     react_system_prompt = PromptTemplate(react_system_header_str)
