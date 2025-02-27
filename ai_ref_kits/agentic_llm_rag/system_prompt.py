@@ -1,5 +1,6 @@
 ## DO NOT modify this prompt. This prompt is the ReactAgent default.
-## You can modify the Additional Rules section if you want to add more rules
+## You can modify the ## Additional Rules section if you want to add more rules
+## Note: Adding extra context can confuse the model to go into "roleplay" mode instead of using tools.
 
 react_system_header_str = """\
 

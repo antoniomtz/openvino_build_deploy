@@ -42,18 +42,14 @@ ov_config = {
     props.cache_dir(): ""
 }
 
-# def qwen_completion_to_prompt(completion, system_prompt=""):
-#     return f"system\n{system_prompt}\nuser\n{completion}\nassistant\n"
-
 def setup_models(llm_model_path, embedding_model_path, device):
-    # Load the Llama model locally
+    # Load LLM model locally    
     llm = OpenVINOLLM(
         model_id_or_path=str(llm_model_path),
         context_window=8192,
         max_new_tokens=500,
         model_kwargs={"ov_config": ov_config},
-        generate_kwargs={"do_sample": False, "temperature": 0.1, "top_p": 0.8},
-        #completion_to_prompt=qwen_completion_to_prompt,        
+        generate_kwargs={"do_sample": False, "temperature": 0.1, "top_p": 0.8},        
         device_map=device,
     )
 
@@ -129,7 +125,7 @@ def setup_tools():
 
 
 def load_documents(text_example_en_path):
-    # Check and download document if not present
+    
     if not text_example_en_path.exists():
         text_example_en = "test_painting_llm_rag.pdf"
         r = requests.get(text_example_en)
@@ -179,35 +175,8 @@ def run_app(agent):
         return table
 
     def _generate_response(chat_history, log_history):
-        log.info(f"log_history {log_history}")
-        estimated_tokens = sum(len(msg[0].split()) + len(msg[1].split()) for msg in chat_history) * 1.3
-    
-        # Add checkpoint counter to track interactions
-        # if not hasattr(_generate_response, 'interaction_count'):
-        #     _generate_response.interaction_count = 0
+        log.info(f"log_history {log_history}")           
         
-        # _generate_response.interaction_count += 1
-        
-        # Force reset every few interactions regardless of estimated token count
-        # if _generate_response.interaction_count >= 5:  # Reset after 4 interactions
-        #     log.info("Performing preventative agent reset after 4 interactions")
-            
-        #     # Save important state
-        #     current_cart = ShoppingCart.get_cart_items()
-            
-        #     # Reset agent
-        #     agent.reset()
-            
-        #     # Restore cart
-        #     for item in current_cart:
-        #         ShoppingCart.add_to_cart(
-        #             item["product_name"], 
-        #             item["quantity"], 
-        #             item["price_per_unit"]
-        #         )
-            
-        #     # Reset counter
-        #     _generate_response.interaction_count = 0
         if not isinstance(log_history, list):
             log_history = []
 
@@ -274,7 +243,7 @@ def run_app(agent):
 
     def _reset_chat():
         agent.reset()
-        ShoppingCart._cart_items = []  # Also clear the cart
+        ShoppingCart._cart_items = []
         return "", [], "🤔 Agent's Thought Process", update_cart_display()
 
     def run():
@@ -379,11 +348,10 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str, 
     
     nest_asyncio.apply()
 
-    # Load agent config
-    personality_file_path = Path(personality)
-
-    with open(personality_file_path, "rb") as f:
-        chatbot_config = yaml.safe_load(f)    
+    context = """\
+    You are a helpful, respectful, and knowledgeable Paint Employee Concierge working at a retail store, designed to help new employees with their onboarding experience and complex questions from customers.    
+    You will answer questions about paint suggestions, price details, calculations and adding items to a shopping cart in the persona of a paint store employee.
+    """
   
     # Define agent and available tools
     agent = ReActAgent.from_tools(
@@ -393,9 +361,8 @@ def main(chat_model: str, embedding_model: str, rag_pdf: str, personality: str, 
         handle_reasoning_failure_fn=custom_handle_reasoning_failure,
         verbose=True,
         react_chat_formatter=ReActChatFormatter.from_defaults(
-            # ReactAgent uses a default system prompt, this is just to expand the context
-            #context=chatbot_config["system_configuration"],
-            observation_role=MessageRole.TOOL          
+            observation_role=MessageRole.TOOL,
+            context=context          
         ),
     ) 
     react_system_prompt = PromptTemplate(react_system_header_str)
